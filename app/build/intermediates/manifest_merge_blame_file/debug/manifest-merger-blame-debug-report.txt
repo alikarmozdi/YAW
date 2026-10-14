@@ -1,8 +1,8 @@
 1<?xml version="1.0" encoding="utf-8"?>
 2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
 3    package="ir.kntu.turnestimator"
-4    android:versionCode="1"
-5    android:versionName="1.0" >
+4    android:versionCode="2"
+5    android:versionName="2.0-A17" >
 6
 7    <uses-sdk
 8        android:minSdkVersion="24"
@@ -20,48 +20,42 @@
 15-->/home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:5:19-65
 16        android:required="true" />
 16-->/home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:5:66-89
-17    <uses-feature
-17-->/home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:6:5-98
-18        android:name="android.hardware.sensor.accelerometer"
-18-->/home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:6:19-71
-19        android:required="true" />
-19-->/home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:6:72-95
-20
-21    <application
-21-->/home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:8:5-25:19
-22        android:allowBackup="true"
-22-->/home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:9:9-35
-23        android:debuggable="true"
-24        android:extractNativeLibs="false"
-25        android:icon="@android:drawable/ic_menu_compass"
-25-->/home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:10:9-57
-26        android:label="Turn Yaw Estimator"
-26-->/home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:11:9-43
-27        android:supportsRtl="true"
-27-->/home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:12:9-35
-28        android:theme="@android:style/Theme.DeviceDefault.NoActionBar" >
-28-->/home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:13:9-71
-29        <activity
-29-->/home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:15:9-24:20
-30            android:name="ir.kntu.turnestimator.MainActivity"
-30-->/home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:16:13-41
-31            android:configChanges="orientation|screenSize|keyboardHidden"
-31-->/home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:19:13-74
-32            android:exported="true"
-32-->/home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:17:13-36
-33            android:screenOrientation="portrait" >
-33-->/home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:18:13-49
-34            <intent-filter>
-34-->/home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:20:13-23:29
-35                <action android:name="android.intent.action.MAIN" />
-35-->/home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:21:17-69
-35-->/home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:21:25-66
-36
-37                <category android:name="android.intent.category.LAUNCHER" />
-37-->/home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:22:17-77
-37-->/home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:22:27-74
-38            </intent-filter>
-39        </activity>
-40    </application>
-41
-42</manifest>
+17
+18    <application
+18-->/home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:7:5-24:19
+19        android:allowBackup="true"
+19-->/home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:8:9-35
+20        android:debuggable="true"
+21        android:extractNativeLibs="false"
+22        android:icon="@android:drawable/ic_menu_compass"
+22-->/home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:9:9-57
+23        android:label="Turn Yaw A17"
+23-->/home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:10:9-37
+24        android:supportsRtl="true"
+24-->/home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:11:9-35
+25        android:theme="@android:style/Theme.DeviceDefault.NoActionBar" >
+25-->/home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:12:9-71
+26        <activity
+26-->/home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:14:9-23:20
+27            android:name="ir.kntu.turnestimator.MainActivity"
+27-->/home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:15:13-41
+28            android:configChanges="orientation|screenSize|keyboardHidden"
+28-->/home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:18:13-74
+29            android:exported="true"
+29-->/home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:16:13-36
+30            android:screenOrientation="portrait" >
+30-->/home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:17:13-49
+31            <intent-filter>
+31-->/home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:19:13-22:29
+32                <action android:name="android.intent.action.MAIN" />
+32-->/home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:20:17-69
+32-->/home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:20:25-66
+33
+34                <category android:name="android.intent.category.LAUNCHER" />
+34-->/home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:21:17-77
+34-->/home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:21:27-74
+35            </intent-filter>
+36        </activity>
+37    </application>
+38
+39</manifest>
