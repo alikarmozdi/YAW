@@ -1,26 +1,768 @@
-name: Android CI
+name: Build Turn Estimator APK
 
 on:
   push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
-    - name: set up JDK 11
-      uses: actions/setup-java@v4
-      with:
-        java-version: '11'
-        distribution: 'temurin'
-        cache: gradle
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-    - name: Grant execute permission for gradlew
-      run: chmod +x gradlew
-    - name: Build with Gradle
-      run: ./gradlew build
+      - name: Generate Android Project Files (If Missing)
+        run: |
+          mkdir -p app/src/main/java/ir/kntu/turnestimator
+
+          cat << 'EOF' > settings.gradle
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "TurnYawEstimator"
+          include ':app'
+          EOF
+
+          cat << 'EOF' > build.gradle
+          plugins {
+              id 'com.android.application' version '8.2.2' apply false
+          }
+          EOF
+
+          cat << 'EOF' > app/build.gradle
+          plugins {
+              id 'com.android.application'
+          }
+
+          android {
+              namespace 'ir.kntu.turnestimator'
+              compileSdk 34
+
+              defaultConfig {
+                  applicationId "ir.kntu.turnestimator"
+                  minSdk 24
+                  targetSdk 34
+                  versionCode 1
+                  versionName "1.0"
+              }
+
+              buildTypes {
+                  debug {
+                      minifyEnabled false
+                  }
+              }
+
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+          }
+
+          dependencies {
+          }
+          EOF
+
+          cat << 'EOF' > app/src/main/AndroidManifest.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+              <uses-feature android:name="android.hardware.sensor.gyroscope" android:required="true" />
+              <uses-feature android:name="android.hardware.sensor.compass" android:required="true" />
+              <uses-feature android:name="android.hardware.sensor.accelerometer" android:required="true" />
+
+              <application
+                  android:allowBackup="true"
+                  android:icon="@android:drawable/ic_menu_compass"
+                  android:label="Turn Yaw Estimator"
+                  android:supportsRtl="true"
+                  android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
+
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true"
+                      android:screenOrientation="portrait"
+                      android:configChanges="orientation|screenSize|keyboardHidden">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+
+          </manifest>
+          EOF
+
+          if [ ! -f app/src/main/java/ir/kntu/turnestimator/MainActivity.java ]; then
+          cat << 'EOF' > app/src/main/java/ir/kntu/turnestimator/MainActivity.java
+          package ir.kntu.turnestimator;
+
+          import android.app.Activity;
+          import android.content.ClipData;
+          import android.content.ClipboardManager;
+          import android.content.Context;
+          import android.content.SharedPreferences;
+          import android.graphics.Color;
+          import android.graphics.Typeface;
+          import android.hardware.Sensor;
+          import android.hardware.SensorEvent;
+          import android.hardware.SensorEventListener;
+          import android.hardware.SensorManager;
+          import android.os.Bundle;
+          import android.text.InputType;
+          import android.view.Gravity;
+          import android.view.WindowManager;
+          import android.widget.Button;
+          import android.widget.EditText;
+          import android.widget.LinearLayout;
+          import android.widget.ScrollView;
+          import android.widget.TextView;
+          import android.widget.Toast;
+
+          import java.util.Locale;
+
+          public class MainActivity extends Activity implements SensorEventListener {
+
+              private SensorManager sensorManager;
+              private Sensor gyroSensor, magSensor, accelSensor;
+
+              private final float[] gravityVec = new float[]{0f, 0f, 9.81f};
+              private final float[] magRaw = new float[]{0f, 0f, 0f};
+              private boolean hasGravity = false, hasMag = false;
+
+              private boolean isCalibratingMag = false;
+              private final float[] magMin = new float[]{1000f, 1000f, 1000f};
+              private final float[] magMax = new float[]{-1000f, -1000f, -1000f};
+              private final float[] magHardIron = new float[]{0f, 0f, 0f};
+
+              private double omegaStart = 3.5;
+              private double omegaStop = 1.2;
+              private double tPre = 1.0;
+              private double tSettle = 0.6;
+              private double alphaBias = 0.003;
+              private double sigmaArw = 0.05;
+              private double sigmaBias = 0.15;
+              private double sigmaMag0 = 3.5;
+              private double gammaMag = 40.0;
+              private double nuMax = 25.0;
+
+              private enum State { STRAIGHT, TURNING }
+              private State currentState = State.STRAIGHT;
+
+              private double cumulativeHeading = 0.0;
+              private double gyroBias = 0.0;
+              private long lastGyroTimestamp = 0;
+
+              private static final int RING_CAPACITY = 500;
+              private final double[] ringDpsi = new double[RING_CAPACITY];
+              private final double[] ringDt = new double[RING_CAPACITY];
+              private int ringHead = 0;
+              private int ringCount = 0;
+
+              private final double[] magHorizFiltered = new double[]{0, 0, 0};
+              private final double[] magHorizStart = new double[]{0, 0, 0};
+              private double magNormStart = 0.0;
+              private boolean magFilterInit = false;
+
+              private double turnGyroDeltaPsi = 0.0;
+              private double turnDuration = 0.0;
+              private double belowStopTimer = 0.0;
+              private double settleTailDpsi = 0.0;
+              private int turnCounter = 0;
+
+              private TextView tvStateBanner, tvHeading, tvLiveGyro, tvLastTurnSummary, tvCalibStatus, tvLog;
+              private EditText etInitHeading, etOmegaStart, etOmegaStop, etTPre, etAlpha, etSigmaBias, etSigmaMag, etGamma, etNuMax;
+              private final StringBuilder csvBuilder = new StringBuilder("Turn,Duration_s,dPsi_Gyro,dPsi_Mag,Kalman_K,dPsi_Fused,Total_Heading,dMagNorm_uT\n");
+
+              private SharedPreferences prefs;
+
+              @Override
+              protected void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+                  getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
+                  prefs = getSharedPreferences("TurnEstimatorPrefs", Context.MODE_PRIVATE);
+                  loadPreferences();
+
+                  sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
+                  if (sensorManager != null) {
+                      gyroSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
+                      magSensor = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
+                      accelSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+                  }
+
+                  buildUserInterface();
+              }
+
+              private void buildUserInterface() {
+                  ScrollView scrollView = new ScrollView(this);
+                  scrollView.setBackgroundColor(Color.parseColor("#12161F"));
+
+                  LinearLayout root = new LinearLayout(this);
+                  root.setOrientation(LinearLayout.VERTICAL);
+                  int pad = dp(14);
+                  root.setPadding(pad, pad, pad, pad);
+
+                  tvStateBanner = new TextView(this);
+                  tvStateBanner.setText("وضعیت: مسیر مستقیم (در حال یادگیری بایاس)");
+                  tvStateBanner.setTextColor(Color.WHITE);
+                  tvStateBanner.setTextSize(16);
+                  tvStateBanner.setTypeface(Typeface.DEFAULT_BOLD);
+                  tvStateBanner.setGravity(Gravity.CENTER);
+                  tvStateBanner.setBackgroundColor(Color.parseColor("#1E6F5C"));
+                  tvStateBanner.setPadding(dp(10), dp(12), dp(10), dp(12));
+                  root.addView(tvStateBanner, makeParams(0, 10));
+
+                  LinearLayout cardMain = makeCard();
+                  tvHeading = makeText("زاویه سمت خودرو (ψ): 0.0°", 22, Color.parseColor("#FFD166"), true);
+                  tvLiveGyro = makeText("نرخ دوران افقی: 0.0°/s | بایاس ژایرو: 0.00°/s", 13, Color.parseColor("#CCCCCC"), false);
+                  tvLastTurnSummary = makeText(
+                          "آخرین پیچ ثبت‌شده:\n" +
+                          "• Δψ ژایرو: 0.0°  |  Δψ قطب‌نما: 0.0°\n" +
+                          "• بهره کالمن (K): 0.00  |  Δψ نهایی (تلفیق): 0.0°",
+                          14, Color.parseColor("#06D6A0"), false);
+                  cardMain.addView(tvHeading);
+                  cardMain.addView(tvLiveGyro, makeParams(6, 8));
+                  cardMain.addView(tvLastTurnSummary);
+                  root.addView(cardMain, makeParams(0, 10));
+
+                  LinearLayout cardControls = makeCard();
+                  cardControls.addView(makeText("تنظیم زاویه سمت اولیه و کالیبراسیون قطب‌نما", 15, Color.WHITE, true));
+
+                  LinearLayout rowHeading = new LinearLayout(this);
+                  rowHeading.setOrientation(LinearLayout.HORIZONTAL);
+                  etInitHeading = makeInput(String.valueOf(cumulativeHeading));
+                  Button btnSetHeading = makeButton("ثبت زاویه سمت اولیه (°)", "#118AB2");
+                  btnSetHeading.setOnClickListener(v -> {
+                      try {
+                          cumulativeHeading = Double.parseDouble(etInitHeading.getText().toString());
+                          turnGyroDeltaPsi = 0.0;
+                          Toast.makeText(this, "زاویه اولیه ثبت شد", Toast.LENGTH_SHORT).show();
+                      } catch (Exception ignored) {}
+                  });
+                  LinearLayout.LayoutParams lpInput = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+                  lpInput.setMargins(0, 0, dp(8), 0);
+                  rowHeading.addView(etInitHeading, lpInput);
+                  rowHeading.addView(btnSetHeading, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.4f));
+                  cardControls.addView(rowHeading, makeParams(8, 8));
+
+                  tvCalibStatus = makeText(String.format(Locale.US,
+                          "آفست Hard-Iron فعلی (µT): [%.1f, %.1f, %.1f]",
+                          magHardIron[0], magHardIron[1], magHardIron[2]), 12, Color.parseColor("#AAAAAA"), false);
+                  cardControls.addView(tvCalibStatus, makeParams(0, 6));
+
+                  LinearLayout rowCalib = new LinearLayout(this);
+                  rowCalib.setOrientation(LinearLayout.HORIZONTAL);
+                  Button btnCalib = makeButton("شروع/پایان کالیبراسیون قطب‌نما", "#EF476F");
+                  btnCalib.setOnClickListener(v -> toggleMagCalibration(btnCalib));
+                  Button btnResetCalib = makeButton("صفر کردن آفست", "#555B6E");
+                  btnResetCalib.setOnClickListener(v -> {
+                      magHardIron[0] = magHardIron[1] = magHardIron[2] = 0f;
+                      savePreferences();
+                      updateCalibLabel();
+                  });
+                  rowCalib.addView(btnCalib, lpInput);
+                  rowCalib.addView(btnResetCalib, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 0.8f));
+                  cardControls.addView(rowCalib);
+                  root.addView(cardControls, makeParams(0, 10));
+
+                  LinearLayout cardParams = makeCard();
+                  cardParams.addView(makeText("پارامترهای تیونینگ الگوریتم (قابل تغییر در لحظه)", 15, Color.parseColor("#FFD166"), true));
+
+                  etOmegaStart = addParamRow(cardParams, "آستانه شروع پیچ ω_start (deg/s):", omegaStart);
+                  etOmegaStop  = addParamRow(cardParams, "آستانه پایان پیچ ω_stop (deg/s):", omegaStop);
+                  etTPre       = addParamRow(cardParams, "بافر پیش‌نگری ابتدای پیچ T_pre (s):", tPre);
+                  etAlpha      = addParamRow(cardParams, "ضریب یادگیری بایاس ژایرو (α):", alphaBias);
+                  etSigmaBias  = addParamRow(cardParams, "انحراف معیار بایاس σ_bias (deg/s):", sigmaBias);
+                  etSigmaMag   = addParamRow(cardParams, "انحراف معیار پایه قطب‌نما σ_mag0 (deg):", sigmaMag0);
+                  etGamma      = addParamRow(cardParams, "ضریب جریمه مغناطیسی γ:", gammaMag);
+                  etNuMax      = addParamRow(cardParams, "گیت رد خطای قطب‌نما ν_max (deg):", nuMax);
+
+                  Button btnSaveParams = makeButton("ذخیره و اعمال پارامترهای تیونینگ", "#06D6A0");
+                  btnSaveParams.setTextColor(Color.BLACK);
+                  btnSaveParams.setOnClickListener(v -> applyAndSaveTuningParams());
+                  cardParams.addView(btnSaveParams, makeParams(10, 0));
+                  root.addView(cardParams, makeParams(0, 10));
+
+                  LinearLayout cardLog = makeCard();
+                  cardLog.addView(makeText("لاگ پیچ‌ها و تقاطع‌های ثبت‌شده", 15, Color.WHITE, true));
+
+                  LinearLayout rowLogBtns = new LinearLayout(this);
+                  rowLogBtns.setOrientation(LinearLayout.HORIZONTAL);
+                  Button btnCopyCsv = makeButton("کپی CSV در کلیپ‌بورد", "#118AB2");
+                  btnCopyCsv.setOnClickListener(v -> {
+                      ClipboardManager cb = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                      cb.setPrimaryClip(ClipData.newPlainText("TurnLogCSV", csvBuilder.toString()));
+                      Toast.makeText(this, "اطلاعات تمام پیچ‌ها با فرمت CSV کپی شد", Toast.LENGTH_SHORT).show();
+                  });
+                  Button btnClearLog = makeButton("پاک کردن لاگ", "#555B6E");
+                  btnClearLog.setOnClickListener(v -> {
+                      turnCounter = 0;
+                      csvBuilder.setLength(0);
+                      csvBuilder.append("Turn,Duration_s,dPsi_Gyro,dPsi_Mag,Kalman_K,dPsi_Fused,Total_Heading,dMagNorm_uT\n");
+                      tvLog.setText("هنوز پیچی ثبت نشده است.");
+                  });
+                  rowLogBtns.addView(btnCopyCsv, lpInput);
+                  rowLogBtns.addView(btnClearLog, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 0.7f));
+                  cardLog.addView(rowLogBtns, makeParams(6, 8));
+
+                  tvLog = makeText("هنوز پیچی ثبت نشده است.", 12, Color.parseColor("#E0E0E0"), false);
+                  tvLog.setTypeface(Typeface.MONOSPACE);
+                  cardLog.addView(tvLog);
+                  root.addView(cardLog, makeParams(0, 20));
+
+                  scrollView.addView(root);
+                  setContentView(scrollView);
+              }
+
+              @Override
+              protected void onResume() {
+                  super.onResume();
+                  if (sensorManager != null) {
+                      if (gyroSensor != null) sensorManager.registerListener(this, gyroSensor, SensorManager.SENSOR_DELAY_GAME);
+                      if (magSensor != null) sensorManager.registerListener(this, magSensor, SensorManager.SENSOR_DELAY_GAME);
+                      if (accelSensor != null) sensorManager.registerListener(this, accelSensor, SensorManager.SENSOR_DELAY_GAME);
+                  }
+              }
+
+              @Override
+              protected void onPause() {
+                  super.onPause();
+                  if (sensorManager != null) {
+                      sensorManager.unregisterListener(this);
+                  }
+              }
+
+              @Override
+              public void onSensorChanged(SensorEvent event) {
+                  int type = event.sensor.getType();
+
+                  if (type == Sensor.TYPE_ACCELEROMETER) {
+                      final float alphaG = 0.96f;
+                      if (!hasGravity) {
+                          System.arraycopy(event.values, 0, gravityVec, 0, 3);
+                          hasGravity = true;
+                      } else {
+                          gravityVec[0] = alphaG * gravityVec[0] + (1f - alphaG) * event.values[0];
+                          gravityVec[1] = alphaG * gravityVec[1] + (1f - alphaG) * event.values[1];
+                          gravityVec[2] = alphaG * gravityVec[2] + (1f - alphaG) * event.values[2];
+                      }
+                  } else if (type == Sensor.TYPE_MAGNETIC_FIELD) {
+                      System.arraycopy(event.values, 0, magRaw, 0, 3);
+                      hasMag = true;
+
+                      if (isCalibratingMag) {
+                          for (int i = 0; i < 3; i++) {
+                              if (magRaw[i] < magMin[i]) magMin[i] = magRaw[i];
+                              if (magRaw[i] > magMax[i]) magMax[i] = magRaw[i];
+                          }
+                      }
+                      updateHorizontalMagneticVector();
+                  } else if (type == Sensor.TYPE_GYROSCOPE) {
+                      processGyroscope(event);
+                  }
+              }
+
+              private void updateHorizontalMagneticVector() {
+                  if (!hasGravity || !hasMag) return;
+
+                  double mx = magRaw[0] - magHardIron[0];
+                  double my = magRaw[1] - magHardIron[1];
+                  double mz = magRaw[2] - magHardIron[2];
+
+                  double gNorm = Math.sqrt(gravityVec[0] * gravityVec[0] + gravityVec[1] * gravityVec[1] + gravityVec[2] * gravityVec[2]);
+                  if (gNorm < 1.0) return;
+                  double gx = gravityVec[0] / gNorm;
+                  double gy = gravityVec[1] / gNorm;
+                  double gz = gravityVec[2] / gNorm;
+
+                  double mDotG = mx * gx + my * gy + mz * gz;
+                  double mhx = mx - mDotG * gx;
+                  double mhy = my - mDotG * gy;
+                  double mhz = mz - mDotG * gz;
+
+                  final double betaMag = 0.12;
+                  if (!magFilterInit) {
+                      magHorizFiltered[0] = mhx;
+                      magHorizFiltered[1] = mhy;
+                      magHorizFiltered[2] = mhz;
+                      magFilterInit = true;
+                  } else {
+                      magHorizFiltered[0] = (1.0 - betaMag) * magHorizFiltered[0] + betaMag * mhx;
+                      magHorizFiltered[1] = (1.0 - betaMag) * magHorizFiltered[1] + betaMag * mhy;
+                      magHorizFiltered[2] = (1.0 - betaMag) * magHorizFiltered[2] + betaMag * mhz;
+                  }
+              }
+
+              private void processGyroscope(SensorEvent event) {
+                  if (lastGyroTimestamp == 0) {
+                      lastGyroTimestamp = event.timestamp;
+                      return;
+                  }
+                  double dt = (event.timestamp - lastGyroTimestamp) * 1e-9;
+                  lastGyroTimestamp = event.timestamp;
+                  if (dt <= 0 || dt > 0.5) return;
+
+                  double gNorm = Math.sqrt(gravityVec[0] * gravityVec[0] + gravityVec[1] * gravityVec[1] + gravityVec[2] * gravityVec[2]);
+                  double gx = (gNorm > 1.0) ? gravityVec[0] / gNorm : 0.0;
+                  double gy = (gNorm > 1.0) ? gravityVec[1] / gNorm : 0.0;
+                  double gz = (gNorm > 1.0) ? gravityVec[2] / gNorm : 1.0;
+
+                  double omegaRad = -(event.values[0] * gx + event.values[1] * gy + event.values[2] * gz);
+                  double omegaDeg = Math.toDegrees(omegaRad);
+
+                  double omegaCorr = omegaDeg - gyroBias;
+                  double absOmega = Math.abs(omegaCorr);
+
+                  if (currentState == State.STRAIGHT) {
+                      if (absOmega <= omegaStart) {
+                          gyroBias = (1.0 - alphaBias) * gyroBias + alphaBias * omegaDeg;
+                          omegaCorr = omegaDeg - gyroBias;
+                          pushToRingBuffer(omegaCorr * dt, dt);
+                          System.arraycopy(magHorizFiltered, 0, magHorizStart, 0, 3);
+                          magNormStart = getMagTotalNorm();
+                      } else {
+                          currentState = State.TURNING;
+                          double[] preData = sumRingBuffer(tPre);
+                          turnGyroDeltaPsi = preData[0] + omegaCorr * dt;
+                          turnDuration = preData[1] + dt;
+                          belowStopTimer = 0.0;
+                          settleTailDpsi = 0.0;
+
+                          tvStateBanner.setText("وضعیت: در حال چرخش در پیچ (انتگرال‌گیری فعال)");
+                          tvStateBanner.setBackgroundColor(Color.parseColor("#D97706"));
+                      }
+                  } else if (currentState == State.TURNING) {
+                      turnGyroDeltaPsi += omegaCorr * dt;
+                      turnDuration += dt;
+
+                      if (absOmega < omegaStop) {
+                          belowStopTimer += dt;
+                          settleTailDpsi += omegaCorr * dt;
+                          if (belowStopTimer >= tSettle) {
+                              finalizeTurnAndFuse();
+                              currentState = State.STRAIGHT;
+                              clearRingBuffer();
+
+                              tvStateBanner.setText("وضعیت: مسیر مستقیم (در حال یادگیری بایاس)");
+                              tvStateBanner.setBackgroundColor(Color.parseColor("#1E6F5C"));
+                          }
+                      } else {
+                          belowStopTimer = 0.0;
+                          settleTailDpsi = 0.0;
+                      }
+                  }
+
+                  double liveHeading = normalize360(cumulativeHeading + (currentState == State.TURNING ? turnGyroDeltaPsi : 0.0));
+                  tvHeading.setText(String.format(Locale.US, "زاویه سمت خودرو (ψ): %.1f°", liveHeading));
+                  tvLiveGyro.setText(String.format(Locale.US,
+                          "نرخ دوران افقی: %+.1f°/s | بایاس: %+.2f°/s | Δψ لحظه‌ای پیچ: %+.1f°",
+                          omegaCorr, gyroBias, (currentState == State.TURNING ? turnGyroDeltaPsi : 0.0)));
+              }
+
+              private void finalizeTurnAndFuse() {
+                  double effectiveDuration = Math.max(0.5, turnDuration - belowStopTimer);
+                  double dPsiGyro = turnGyroDeltaPsi - settleTailDpsi;
+
+                  if (Math.abs(dPsiGyro) < 8.0) {
+                      turnGyroDeltaPsi = 0.0;
+                      return;
+                  }
+
+                  double dPsiMag = compute3dHorizontalMagAngle(magHorizStart, magHorizFiltered);
+                  double innovation = wrapAngle180(dPsiMag - dPsiGyro);
+                  double dPsiMagUnwrapped = dPsiGyro + innovation;
+
+                  double pGyro = (sigmaArw * sigmaArw) * effectiveDuration
+                               + (sigmaBias * effectiveDuration) * (sigmaBias * effectiveDuration);
+
+                  double magNormEnd = getMagTotalNorm();
+                  double deltaNorm = Math.abs(magNormEnd - magNormStart);
+                  double rMag = (sigmaMag0 * sigmaMag0) + gammaMag * (deltaNorm * deltaNorm);
+
+                  double kalmanK;
+                  if (Math.abs(innovation) > nuMax) {
+                      kalmanK = 0.0;
+                  } else {
+                      kalmanK = pGyro / (pGyro + rMag);
+                  }
+
+                  double dPsiFused = dPsiGyro + kalmanK * innovation;
+                  cumulativeHeading = normalize360(cumulativeHeading + dPsiFused);
+                  turnGyroDeltaPsi = 0.0;
+
+                  turnCounter++;
+
+                  tvLastTurnSummary.setText(String.format(Locale.US,
+                          "آخرین پیچ ثبت‌شده (پیچ شماره %d - مدت: %.1fs):\n" +
+                          "• Δψ ژایرو: %+.1f°  |  Δψ قطب‌نما: %+.1f°\n" +
+                          "• بهره کالمن (K): %.2f  |  Δψ نهایی: %+.1f° (Δ|B|: %.1fµT)",
+                          turnCounter, effectiveDuration, dPsiGyro, dPsiMagUnwrapped, kalmanK, dPsiFused, deltaNorm));
+
+                  String logLine = String.format(Locale.US,
+                          "#%d | T:%.1fs | Gyro:%+.1f° | Mag:%+.1f° | K:%.2f => Fused:%+.1f° (ψ=%.1f°)",
+                          turnCounter, effectiveDuration, dPsiGyro, dPsiMagUnwrapped, kalmanK, dPsiFused, cumulativeHeading);
+
+                  String prevLog = tvLog.getText().toString();
+                  if (turnCounter == 1) {
+                      tvLog.setText(logLine);
+                  } else {
+                      tvLog.setText(logLine + "\n" + prevLog);
+                  }
+
+                  csvBuilder.append(String.format(Locale.US, "%d,%.2f,%.2f,%.2f,%.3f,%.2f,%.2f,%.2f\n",
+                          turnCounter, effectiveDuration, dPsiGyro, dPsiMagUnwrapped, kalmanK, dPsiFused, cumulativeHeading, deltaNorm));
+              }
+
+              private double compute3dHorizontalMagAngle(double[] mStart, double[] mEnd) {
+                  double gNorm = Math.sqrt(gravityVec[0] * gravityVec[0] + gravityVec[1] * gravityVec[1] + gravityVec[2] * gravityVec[2]);
+                  if (gNorm < 1.0) return 0.0;
+                  double gx = gravityVec[0] / gNorm;
+                  double gy = gravityVec[1] / gNorm;
+                  double gz = gravityVec[2] / gNorm;
+
+                  double cx = mStart[1] * mEnd[2] - mStart[2] * mEnd[1];
+                  double cy = mStart[2] * mEnd[0] - mStart[0] * mEnd[2];
+                  double cz = mStart[0] * mEnd[1] - mStart[1] * mEnd[0];
+
+                  double crossDotG = cx * gx + cy * gy + cz * gz;
+                  double dot = mStart[0] * mEnd[0] + mStart[1] * mEnd[1] + mStart[2] * mEnd[2];
+
+                  return Math.toDegrees(Math.atan2(crossDotG, dot));
+              }
+
+              private double getMagTotalNorm() {
+                  double mx = magRaw[0] - magHardIron[0];
+                  double my = magRaw[1] - magHardIron[1];
+                  double mz = magRaw[2] - magHardIron[2];
+                  return Math.sqrt(mx * mx + my * my + mz * mz);
+              }
+
+              private void pushToRingBuffer(double dpsi, double dt) {
+                  ringDpsi[ringHead] = dpsi;
+                  ringDt[ringHead] = dt;
+                  ringHead = (ringHead + 1) % RING_CAPACITY;
+                  if (ringCount < RING_CAPACITY) ringCount++;
+              }
+
+              private double[] sumRingBuffer(double maxTimeSec) {
+                  double sumPsi = 0.0;
+                  double sumT = 0.0;
+                  for (int i = 0; i < ringCount; i++) {
+                      int idx = (ringHead - 1 - i + RING_CAPACITY) % RING_CAPACITY;
+                      sumPsi += ringDpsi[idx];
+                      sumT += ringDt[idx];
+                      if (sumT >= maxTimeSec) break;
+                  }
+                  return new double[]{sumPsi, sumT};
+              }
+
+              private void clearRingBuffer() {
+                  ringHead = 0;
+                  ringCount = 0;
+              }
+
+              private void toggleMagCalibration(Button btn) {
+                  if (!isCalibratingMag) {
+                      isCalibratingMag = true;
+                      for (int i = 0; i < 3; i++) {
+                          magMin[i] = 1000f;
+                          magMax[i] = -1000f;
+                      }
+                      btn.setText("پایان و ذخیره کالیبراسیون (یک دور بزنید)");
+                      btn.setBackgroundColor(Color.parseColor("#FFD166"));
+                      btn.setTextColor(Color.BLACK);
+                  } else {
+                      isCalibratingMag = false;
+                      for (int i = 0; i < 3; i++) {
+                          if (magMax[i] > magMin[i]) {
+                              magHardIron[i] = (magMax[i] + magMin[i]) / 2.0f;
+                          }
+                      }
+                      savePreferences();
+                      updateCalibLabel();
+                      btn.setText("شروع/پایان کالیبراسیون قطب‌نما");
+                      btn.setBackgroundColor(Color.parseColor("#EF476F"));
+                      btn.setTextColor(Color.WHITE);
+                      Toast.makeText(this, "کالیبراسیون Hard-Iron ذخیره شد", Toast.LENGTH_SHORT).show();
+                  }
+              }
+
+              private void updateCalibLabel() {
+                  tvCalibStatus.setText(String.format(Locale.US,
+                          "آفست Hard-Iron فعلی (µT): [%.1f, %.1f, %.1f]",
+                          magHardIron[0], magHardIron[1], magHardIron[2]));
+              }
+
+              private void applyAndSaveTuningParams() {
+                  try {
+                      omegaStart = Double.parseDouble(etOmegaStart.getText().toString());
+                      omegaStop  = Double.parseDouble(etOmegaStop.getText().toString());
+                      tPre       = Double.parseDouble(etTPre.getText().toString());
+                      alphaBias  = Double.parseDouble(etAlpha.getText().toString());
+                      sigmaBias  = Double.parseDouble(etSigmaBias.getText().toString());
+                      sigmaMag0  = Double.parseDouble(etSigmaMag.getText().toString());
+                      gammaMag   = Double.parseDouble(etGamma.getText().toString());
+                      nuMax      = Double.parseDouble(etNuMax.getText().toString());
+                      savePreferences();
+                      Toast.makeText(this, "پارامترها با موفقیت ذخیره و اعمال شدند", Toast.LENGTH_SHORT).show();
+                  } catch (Exception e) {
+                      Toast.makeText(this, "خطا در فرمت اعداد وارد شده!", Toast.LENGTH_SHORT).show();
+                  }
+              }
+
+              private void loadPreferences() {
+                  omegaStart = prefs.getFloat("omegaStart", 3.5f);
+                  omegaStop  = prefs.getFloat("omegaStop", 1.2f);
+                  tPre       = prefs.getFloat("tPre", 1.0f);
+                  alphaBias  = prefs.getFloat("alphaBias", 0.003f);
+                  sigmaBias  = prefs.getFloat("sigmaBias", 0.15f);
+                  sigmaMag0  = prefs.getFloat("sigmaMag0", 3.5f);
+                  gammaMag   = prefs.getFloat("gammaMag", 40.0f);
+                  nuMax      = prefs.getFloat("nuMax", 25.0f);
+                  magHardIron[0] = prefs.getFloat("magHx", 0f);
+                  magHardIron[1] = prefs.getFloat("magHy", 0f);
+                  magHardIron[2] = prefs.getFloat("magHz", 0f);
+              }
+
+              private void savePreferences() {
+                  prefs.edit()
+                          .putFloat("omegaStart", (float) omegaStart)
+                          .putFloat("omegaStop", (float) omegaStop)
+                          .putFloat("tPre", (float) tPre)
+                          .putFloat("alphaBias", (float) alphaBias)
+                          .putFloat("sigmaBias", (float) sigmaBias)
+                          .putFloat("sigmaMag0", (float) sigmaMag0)
+                          .putFloat("gammaMag", (float) gammaMag)
+                          .putFloat("nuMax", (float) nuMax)
+                          .putFloat("magHx", magHardIron[0])
+                          .putFloat("magHy", magHardIron[1])
+                          .putFloat("magHz", magHardIron[2])
+                          .apply();
+              }
+
+              private static double wrapAngle180(double deg) {
+                  while (deg > 180.0) deg -= 360.0;
+                  while (deg < -180.0) deg += 360.0;
+                  return deg;
+              }
+
+              private static double normalize360(double deg) {
+                  deg = deg % 360.0;
+                  if (deg < 0) deg += 360.0;
+                  return deg;
+              }
+
+              private LinearLayout makeCard() {
+                  LinearLayout card = new LinearLayout(this);
+                  card.setOrientation(LinearLayout.VERTICAL);
+                  card.setBackgroundColor(Color.parseColor("#1E2433"));
+                  int p = dp(12);
+                  card.setPadding(p, p, p, p);
+                  return card;
+              }
+
+              private TextView makeText(String text, int sp, int color, boolean bold) {
+                  TextView tv = new TextView(this);
+                  tv.setText(text);
+                  tv.setTextSize(sp);
+                  tv.setTextColor(color);
+                  if (bold) tv.setTypeface(Typeface.DEFAULT_BOLD);
+                  return tv;
+              }
+
+              private EditText makeInput(String initial) {
+                  EditText et = new EditText(this);
+                  et.setText(initial);
+                  et.setTextColor(Color.WHITE);
+                  et.setTextSize(14);
+                  et.setBackgroundColor(Color.parseColor("#2B3346"));
+                  et.setPadding(dp(8), dp(6), dp(8), dp(6));
+                  et.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL | InputType.TYPE_NUMBER_FLAG_SIGNED);
+                  return et;
+              }
+
+              private Button makeButton(String title, String hexColor) {
+                  Button btn = new Button(this);
+                  btn.setText(title);
+                  btn.setTextSize(13);
+                  btn.setTextColor(Color.WHITE);
+                  btn.setBackgroundColor(Color.parseColor(hexColor));
+                  return btn;
+              }
+
+              private EditText addParamRow(LinearLayout parent, String label, double val) {
+                  LinearLayout row = new LinearLayout(this);
+                  row.setOrientation(LinearLayout.HORIZONTAL);
+                  row.setGravity(Gravity.CENTER_VERTICAL);
+
+                  TextView tv = makeText(label, 13, Color.parseColor("#D0D6E2"), false);
+                  EditText et = makeInput(String.valueOf(val));
+
+                  LinearLayout.LayoutParams lpLabel = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.8f);
+                  LinearLayout.LayoutParams lpEdit = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.0f);
+                  row.addView(tv, lpLabel);
+                  row.addView(et, lpEdit);
+                  parent.addView(row, makeParams(6, 0));
+                  return et;
+              }
+
+              private LinearLayout.LayoutParams makeParams(int topDp, int bottomDp) {
+                  LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                          LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+                  lp.setMargins(0, dp(topDp), 0, dp(bottomDp));
+                  return lp;
+              }
+
+              private int dp(int v) {
+                  return Math.round(v * getResources().getDisplayMetrics().density);
+              }
+
+              @Override
+              public void onAccuracyChanged(Sensor sensor, int accuracy) {}
+          }
+          EOF
+          fi
+
+      - name: Commit Generated Project Files to Repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add settings.gradle build.gradle app/
+          if ! git diff --staged --quiet; then
+            git commit -m "Auto-generate Android project files [skip ci]"
+            git push
+          fi
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Gradle and Build Debug APK
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.5'
+          arguments: assembleDebug
+
+      - name: Upload Compiled APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: TurnYawEstimator-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
