@@ -1,0 +1,7 @@
+ir.kntu.turnestimator.app-pngs-0 /home/runner/work/YAW/YAW/app/build/generated/res/pngs/debug
+ir.kntu.turnestimator.app-resValues-1 /home/runner/work/YAW/YAW/app/build/generated/res/resValues/debug
+ir.kntu.turnestimator.app-packageDebugResources-2 /home/runner/work/YAW/YAW/app/build/intermediates/incremental/debug/packageDebugResources/merged.dir
+ir.kntu.turnestimator.app-packageDebugResources-3 /home/runner/work/YAW/YAW/app/build/intermediates/incremental/debug/packageDebugResources/stripped.dir
+ir.kntu.turnestimator.app-merged_res-4 /home/runner/work/YAW/YAW/app/build/intermediates/merged_res/debug
+ir.kntu.turnestimator.app-debug-5 /home/runner/work/YAW/YAW/app/src/debug/res
+ir.kntu.turnestimator.app-main-6 /home/runner/work/YAW/YAW/app/src/main/res

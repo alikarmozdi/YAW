@@ -1,0 +1,75 @@
+-- Merging decision tree log ---
+manifest
+ADDED from /home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:2:1-27:12
+INJECTED from /home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:2:1-27:12
+INJECTED from /home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:2:1-27:12
+INJECTED from /home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:2:1-27:12
+	package
+		INJECTED from /home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml
+	android:versionName
+		INJECTED from /home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml
+	android:versionCode
+		INJECTED from /home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml
+	xmlns:android
+		ADDED from /home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:2:11-69
+uses-feature#android.hardware.sensor.gyroscope
+ADDED from /home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:4:5-94
+	android:required
+		ADDED from /home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:4:68-91
+	android:name
+		ADDED from /home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:4:19-67
+uses-feature#android.hardware.sensor.compass
+ADDED from /home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:5:5-92
+	android:required
+		ADDED from /home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:5:66-89
+	android:name
+		ADDED from /home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:5:19-65
+uses-feature#android.hardware.sensor.accelerometer
+ADDED from /home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:6:5-98
+	android:required
+		ADDED from /home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:6:72-95
+	android:name
+		ADDED from /home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:6:19-71
+application
+ADDED from /home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:8:5-25:19
+INJECTED from /home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:8:5-25:19
+	android:extractNativeLibs
+		INJECTED from /home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml
+	android:supportsRtl
+		ADDED from /home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:12:9-35
+	android:label
+		ADDED from /home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:11:9-43
+	android:icon
+		ADDED from /home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:10:9-57
+	android:allowBackup
+		ADDED from /home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:9:9-35
+	android:theme
+		ADDED from /home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:13:9-71
+activity#ir.kntu.turnestimator.MainActivity
+ADDED from /home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:15:9-24:20
+	android:screenOrientation
+		ADDED from /home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:18:13-49
+	android:exported
+		ADDED from /home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:17:13-36
+	android:configChanges
+		ADDED from /home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:19:13-74
+	android:name
+		ADDED from /home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:16:13-41
+intent-filter#action:name:android.intent.action.MAIN+category:name:android.intent.category.LAUNCHER
+ADDED from /home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:20:13-23:29
+action#android.intent.action.MAIN
+ADDED from /home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:21:17-69
+	android:name
+		ADDED from /home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:21:25-66
+category#android.intent.category.LAUNCHER
+ADDED from /home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:22:17-77
+	android:name
+		ADDED from /home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml:22:27-74
+uses-sdk
+INJECTED from /home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml reason: use-sdk injection requested
+INJECTED from /home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml
+INJECTED from /home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml
+	android:targetSdkVersion
+		INJECTED from /home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml
+	android:minSdkVersion
+		INJECTED from /home/runner/work/YAW/YAW/app/src/main/AndroidManifest.xml
